@@ -1,19 +1,25 @@
 # CI/CD Multi-Agent Orchestration Design
 
-This project is a Python backend starter structured for a standard application layout. It is organized to support FastAPI-based services and can later be extended for GitHub Actions CI/CD pipelines.
+This project is a Python backend starter designed to be both Kubernetes-friendly and GitHub Actions-compatible. It follows a clean, standard backend layout and is ready for CI validation and container-based deployment.
 
 ## Project structure
 
 ```text
 CI-CD_multi_agent_orchestration_design/
+├── .dockerignore
 ├── .env.example
+├── .github/
+│   └── workflows/
+│       └── ci.yml
 ├── .gitignore
 ├── .python-version
+├── Dockerfile
 ├── LICENSE
 ├── README.md
 ├── main.py
 ├── pyproject.toml
-├── uv.lock
+├── scripts/
+│   └── run_local.sh
 ├── src/
 │   └── backend/
 │       ├── __init__.py
@@ -34,35 +40,49 @@ CI-CD_multi_agent_orchestration_design/
 │       │   └── __init__.py
 │       └── services/
 │           └── __init__.py
+├── k8s/
+│   └── base/
+│       ├── configmap.yaml
+│       ├── deployment.yaml
+│       └── service.yaml
 ├── tests/
 │   └── test_health.py
+├── uv.lock
 └── .venv/
 ```
 
-## Purpose of each folder
+## Folder purpose
 
 - `src/backend/` - main application package
-  - `api/` - API route definitions
-  - `core/` - shared application logic and utilities
-  - `db/` - database access layer
-  - `models/` - domain/data models
-  - `schemas/` - request and response schemas
-  - `services/` - business logic layer
-- `tests/` - automated tests for the project
-- `main.py` - local app entry point
-- `pyproject.toml` - Python project configuration and dependencies
-- `.env.example` - sample environment variables
+  - `api/` - route definitions
+  - `core/` - reusable application logic
+  - `db/` - database code
+  - `models/` - domain models
+  - `schemas/` - input/output validation
+  - `services/` - business logic
+- `tests/` - project test suite
+- `k8s/base/` - Kubernetes deployment manifests for a basic cluster setup
+- `.github/workflows/ci.yml` - CI pipeline for GitHub Actions
+- `Dockerfile` - container build definition for the app
+- `scripts/run_local.sh` - helper script for local backend startup
+- `main.py` - simple entry point for local execution
 
-## Run the application
+## Run locally
 
 ```bash
 uv run python main.py
 ```
 
-Or run directly with Uvicorn:
+Or:
 
 ```bash
 uv run uvicorn src.backend.main:app --reload
+```
+
+Or via script:
+
+```bash
+bash scripts/run_local.sh
 ```
 
 ## Run tests
@@ -71,9 +91,7 @@ uv run uvicorn src.backend.main:app --reload
 uv run pytest -q
 ```
 
-## Health check endpoint
-
-The API includes a basic health endpoint:
+## Health check
 
 ```text
 GET /api/v1/health
@@ -85,6 +103,24 @@ Response:
 {"status": "ok"}
 ```
 
+## GitHub Actions CI
+
+The workflow in `.github/workflows/ci.yml` performs:
+
+- checkout code
+- setup Python
+- install dependencies
+- run tests
+- build the package
+
+## Kubernetes
+
+The manifests in `k8s/base/` provide a starting point for deploying the app in Kubernetes:
+
+- `deployment.yaml` - deployment configuration
+- `service.yaml` - service exposure
+- `configmap.yaml` - environment configuration
+
 ## Notes
 
-This is a clean starting template for a Python backend project. You can expand it by adding authentication, database models, service logic, and CI/CD workflows later.
+This repository is now set up for a clean Python backend workflow with containerization and Kubernetes deployment foundations, while remaining compatible with GitHub-based CI/CD automation.
