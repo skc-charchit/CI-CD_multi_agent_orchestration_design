@@ -7,7 +7,7 @@ WORKDIR /app
 
 COPY pyproject.toml ./
 COPY uv.lock ./
-COPY src ./src
+COPY app/backend/src ./app/backend/src
 COPY main.py ./
 
 RUN pip install --no-cache-dir --upgrade pip && \
@@ -16,4 +16,4 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 EXPOSE 8000
 
-CMD ["uv", "run", "python", "main.py"]
+CMD ["uv", "run", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

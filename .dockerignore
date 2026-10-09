@@ -3,6 +3,9 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .venv/
+node_modules/
+app/frontend/dist/
+app/frontend/.vite/
 .git/
 .gitignore
 .env

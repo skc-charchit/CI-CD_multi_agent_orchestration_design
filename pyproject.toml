@@ -1,18 +1,40 @@
 [project]
 name = "ci-cd-multi-agent-orchestration-design"
 version = "0.1.0"
-description = "A standard Python backend project scaffold"
+description = "A feature-oriented FastAPI application scaffold"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.0",
+    "langgraph>=1.2.14",
+    "pydantic-settings>=2.6.0",
     "uvicorn[standard]>=0.30.0",
 ]
 
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "app/backend/src"}
+
+[tool.setuptools.packages.find]
+where = ["app/backend/src"]
+include = ["backend*"]
+
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = ["app/backend/src"]
+testpaths = ["app/backend/tests"]
 
 [dependency-groups]
 dev = [
     "pytest>=8.3.0",
+    "ruff>=0.11.0",
 ]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "UP"]

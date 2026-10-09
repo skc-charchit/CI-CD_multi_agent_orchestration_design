@@ -1,322 +1,303 @@
-# CI/CD Multi-Agent Orchestration Design
+# Charchit — Selected Projects
 
-This project is a Python backend starter designed to be both Kubernetes-friendly and GitHub Actions-compatible. It follows a clean, standard backend layout and is ready for CI validation and container-based deployment.
+The main app is a standalone React + TypeScript + Vite portfolio. It lists
+public GitHub repositories and links visitors to a project's live site or
+source repository. It reads public repository data directly from GitHub and
+does not require the FastAPI backend.
 
-## Project structure
+Optional frontend features and the backend are maintained separately. They
+can be developed, tested, and built independently, then integrated into the
+main app deliberately when their interfaces and behavior are ready.
+
+## Repository map
 
 ```text
-CI-CD_multi_agent_orchestration_design/
-├── .dockerignore
-├── .env.example
-├── .github/
-│   └── workflows/
-│       └── ci.yml
-├── .gitignore
-├── .python-version
-├── Dockerfile
-├── LICENSE
-├── README.md
-├── main.py
-├── pyproject.toml
-├── scripts/
-│   └── run_local.sh
-├── src/
+.
+├── app/
+│   ├── frontend/                         # Standalone portfolio website
+│   │   ├── src/                          # Frontend source files
+│   │   ├── index.html                    # HTML document entry point
+│   │   ├── package.json                  # Frontend dependencies and commands
+│   │   ├── package-lock.json             # Exact frontend dependency versions
+│   │   ├── tsconfig*.json                # TypeScript compiler configuration
+│   │   └── vite.config.ts                # Vite frontend build/dev configuration
+│   ├── features/
+│   │   └── project-guide/                # Independent chatbot feature package
+│   │       ├── src/                      # Chat UI, README client and guide logic
+│   │       ├── scripts/                  # Feature package build helpers
+│   │       ├── package.json              # Feature dependencies and build command
+│   │       ├── package-lock.json         # Exact feature dependency versions
+│   │       ├── tsconfig.json             # Feature TypeScript configuration
+│   │       └── README.md                 # Feature usage and integration notes
 │   └── backend/
-│       ├── __init__.py
-│       ├── config.py
-│       ├── main.py
-│       ├── api/
-│       │   ├── __init__.py
-│       │   └── v1/
-│       │       ├── __init__.py
-│       │       └── health.py
-│       ├── core/
-│       │   └── __init__.py
-│       ├── db/
-│       │   └── __init__.py
-│       ├── models/
-│       │   └── __init__.py
-│       ├── schemas/
-│       │   └── __init__.py
-│       └── services/
-│           └── __init__.py
-├── k8s/
-│   └── base/
-│       ├── configmap.yaml
-│       ├── deployment.yaml
-│       └── service.yaml
-├── tests/
-│   └── test_health.py
-├── uv.lock
-└── .venv/
+│       ├── src/backend/                  # FastAPI Python package
+│       │   ├── api/                      # Shared API routing/composition
+│       │   ├── core/                     # Application-wide infrastructure
+│       │   ├── db/                       # Future persistence infrastructure
+│       │   ├── features/                 # Backend feature vertical slices
+│       │   ├── models/                   # Future domain/persistence models
+│       │   └── main.py                   # FastAPI app composition root
+│       └── tests/                        # Backend test suite
+├── docs/
+│   ├── api/                              # API contract docs and OpenAPI snapshot
+│   └── architecture.md                   # Architecture and feature workflow
+├── .github/workflows/                    # GitHub Actions automation
+├── k8s/base/                             # Backend Kubernetes starter manifests
+├── scripts/                              # Repository-level developer utilities
+├── .docker/                              # Currently empty; unused
+├── Dockerfile                            # Backend container build
+├── main.py                               # Optional backend launch wrapper
+├── pyproject.toml                        # Python metadata, dependencies, tools
+├── uv.lock                               # Locked Python dependency versions
+├── .python-version                       # Preferred local Python version
+├── .env.example                          # Example local backend configuration
+├── .dockerignore                         # Files omitted from Docker build context
+├── .gitignore                            # Generated/local files excluded from Git
+└── LICENSE                               # Project license
 ```
 
-## Backend folder guide
+## Folder-by-folder guide
 
-The application code lives under `src/backend/`. Keeping the backend in a
-package makes imports predictable and separates HTTP, business, persistence,
-and domain concerns. Each directory contains an `__init__.py` file so Python
-can treat it as a package.
+### `app/frontend/` — main portfolio application
 
-### `src/backend/__init__.py`
+This is the visitor-facing website and the only frontend currently intended
+for standalone hosting.
 
-This marks `backend` as the main Python package. It can expose package-level
-objects in the future, but it currently contains only package metadata.
+- **`src/`** contains the React and TypeScript implementation:
+  - `App.tsx` renders the portfolio, repository cards, search, language
+    filters, loading/error states, and footer.
+  - `api.ts` fetches and validates public repository data from the GitHub
+    REST API. It defaults to `skc-charchit` and omits forks and archived
+    repositories.
+  - `main.tsx` mounts the React app in the HTML root element.
+  - `styles.css` contains the portfolio-only responsive visual styles.
+  - `vite-env.d.ts` declares Vite's client-side TypeScript environment types.
+- **`index.html`** supplies the document title, metadata, root element, and
+  frontend entry script.
+- **`package.json`** lists React/Vite/TypeScript dependencies and commands
+  such as `dev` and `build`.
+- **`package-lock.json`** records exact npm dependency versions for repeatable
+  `npm ci` installs.
+- **`tsconfig.json`** configures application TypeScript checks;
+  **`tsconfig.node.json`** configures checks for Vite's Node-side config.
+- **`vite.config.ts`** configures Vite. The portfolio currently calls the
+  public GitHub API directly; it does not proxy requests through FastAPI.
 
-### `src/backend/main.py`
+The portfolio does not import the Project guide package. This boundary keeps
+its build and future static hosting independent from optional features and the
+backend.
 
-This is the FastAPI application entry point. It currently:
+### `app/features/` — independently developed frontend features
 
-- creates the `FastAPI` application;
-- loads the application name and debug setting from `config.py`;
-- registers version 1 API routes; and
-- provides the root endpoint, `GET /`.
+Each child is a feature package with an explicit public interface. A feature
+under this directory is **not automatically part of the main app**; integration
+requires adding it to the frontend intentionally.
 
-When the project gains agent workflows, this file should remain a thin
-composition layer. Agent orchestration and business decisions belong in
-`services/`, not directly in route handlers.
+#### `app/features/project-guide/`
 
-### `src/backend/config.py`
+This package contains the standalone README-based chatbot feature:
 
-This module contains application settings such as the application name,
-debug mode, and API prefix. It provides one place to add environment-driven
-configuration later, including:
+- **`src/ProjectChat.tsx`** is the exported React chat UI. It accepts project
+  summary data as a prop and does not fetch the portfolio's repository list.
+- **`src/github-readme.ts`** defines the `ProjectSummary` input contract and
+  retrieves public README files from GitHub.
+- **`src/project-guide.ts`** extracts README sections, ranks them against a
+  question, and returns source-grounded excerpts. This is deterministic
+  matching, not an LLM or Agentic AI call.
+- **`src/styles.css`** styles the feature UI without putting those styles into
+  the portfolio stylesheet.
+- **`src/assets.d.ts`** declares CSS module imports for TypeScript.
+- **`scripts/copy-assets.mjs`** copies the feature stylesheet into the
+  generated package output.
+- **`package.json`** describes the feature package, React peer dependency,
+  build command, and package exports.
+- **`package-lock.json`** locks the feature's npm dependencies.
+- **`tsconfig.json`** controls type checking and compiled feature output.
+- **`README.md`** records the input contract, current limitations, build
+  instructions, and future integration guidance.
 
-- model provider and model name;
-- API credentials loaded from environment variables or a secret manager;
-- database and vector-store connection settings;
-- agent timeouts, retry limits, and concurrency limits; and
-- tracing, logging, and feature flags.
+This feature is currently not rendered in the portfolio. No GitHub token,
+model-provider secret, backend service, or database is required for its
+current README-only behavior. The package README explains how it may later be
+integrated with the Agentic AI backend.
 
-Configuration should be read by the application and services rather than
-hard-coded in individual agents.
+### `app/backend/` — separate FastAPI foundation
 
-### `src/backend/api/`
+The backend can run and be tested independently. The portfolio does not
+currently call it.
 
-This package contains the HTTP API layer. API modules define routes, accept
-requests, validate input through schemas, call services, and return responses.
-They should not contain long-running agent reasoning, database queries, or
-provider-specific model code.
+#### `app/backend/src/backend/`
 
-### `src/backend/api/v1/`
+This is the Python application package in the standard `src` layout.
 
-This contains version 1 of the public API. Versioning allows the project to
-change request and response formats later without unexpectedly breaking
-existing clients.
+- **`main.py`** creates the FastAPI application, configures CORS, and includes
+  the composed API router.
+- **`api/`** owns shared HTTP routing:
+  - `router.py` defines the `/api/v1` prefix and registers shared and
+    feature-owned routers.
+  - `routes/health.py` provides the process health endpoint.
+- **`core/`** contains application-wide concerns. `config.py` loads settings
+  such as the app name, debug mode, and CORS origins from environment
+  variables/`.env`.
+- **`features/`** holds backend business capabilities:
+  - **`echo/`** is a small working vertical slice. `api/routes.py` handles the
+    HTTP boundary, `schemas.py` validates request/response data, and
+    `service.py` implements the example use case.
+  - **`agentic_ai/`** is reserved for agentic workflow code. Its README
+    describes the intended module layout and links to the API proposal. No
+    agent endpoint, worker, queue, model provider, or durable run store is
+    implemented yet.
+- **`db/`** is currently a placeholder for database sessions and repository
+  implementations; the current app does not persist data.
+- **`models/`** is currently a placeholder for internal domain or persistence
+  models. API contracts are currently defined with Pydantic schemas inside
+  their features instead.
+- **`__init__.py` files** mark Python package directories for imports.
 
-### `src/backend/api/v1/health.py`
+#### `app/backend/tests/`
 
-This is the currently implemented route module. `GET /api/v1/health` returns
-`{"status": "ok"}` and is used by local development, automated tests, Docker,
-and Kubernetes health checks.
+`test_health.py` checks the root overview and health endpoint.
+`test_examples.py` verifies echo input validation, the response contract, and
+the configured frontend CORS preflight. Keep API tests and service tests here
+as backend capabilities are implemented.
 
-As the agentic API grows, likely route modules include `runs.py` for starting
-and inspecting workflows, `agents.py` for agent metadata, and `tasks.py` for
-task status and results.
+### `docs/` — maintained project documentation
 
-### `src/backend/core/`
+- **`architecture.md`** explains application boundaries, the backend layers,
+  and the process for adding features.
+- **`api/README.md`** explains the current HTTP contracts, how to update the
+  API snapshot, and compatibility expectations.
+- **`api/openapi.json`** is the reviewed snapshot generated from the live
+  FastAPI routes and Pydantic schemas.
+- **`api/agentic-ai-draft.md`** is a proposed asynchronous run contract, not
+  an implemented endpoint or an execution guarantee.
 
-This is for shared application infrastructure and cross-cutting concerns,
-not a place for a specific business workflow. Possible responsibilities are:
+### `.github/workflows/` — CI/CD automation
 
-- structured logging and request correlation IDs;
-- error types and exception handlers;
-- authentication and authorization helpers;
-- retry, timeout, and rate-limit policies;
-- event definitions and workflow state transitions; and
-- tracing and metrics.
+`ci.yml` runs on pushes to `main` and pull requests. It installs Python and
+Node dependencies, runs backend tests and Ruff checks, verifies the OpenAPI
+snapshot, builds the portfolio independently, builds the Project guide
+independently, and builds the Python package. It validates changes; it does
+not currently publish or deploy the website.
 
-It is currently a placeholder package. Keeping these concerns here prevents
-every agent and route from implementing its own slightly different policy.
+### `k8s/base/` — backend Kubernetes starting point
 
-### `src/backend/db/`
+- `deployment.yaml` defines backend replicas, health probes, and resource
+  requests/limits.
+- `service.yaml` exposes the backend inside a Kubernetes cluster.
+- `configmap.yaml` supplies non-secret settings. Production secrets should
+  come from a Kubernetes Secret or external secret manager.
 
-This package owns persistence. It is currently a placeholder. It can later
-contain database sessions, repository classes, migrations, and integrations
-with a relational database, document store, or vector database.
+These manifests do not deploy the static portfolio to GoDaddy.
 
-For an agentic-AI project, persistence is useful for storing users, tasks,
-workflow runs, agent messages, tool calls, checkpoints, audit events, and
-retrieved knowledge. Database access should be kept behind repositories or
-services so agents do not depend directly on SQL details.
+### `scripts/` — repository utilities
 
-### `src/backend/models/`
+- `run_local.sh` starts the FastAPI backend with Uvicorn and reload enabled.
+- `export_openapi.py` writes the generated OpenAPI document to
+  `docs/api/openapi.json`; `--check` fails if the snapshot is stale.
 
-This package is for internal domain and persistence models. It is currently a
-placeholder. Typical models could represent `Task`, `WorkflowRun`, `Agent`,
-`ToolCall`, `Message`, `Artifact`, and `Memory`.
+### `.docker/`
 
-Models describe how information is stored and related inside the system. They
-are different from API schemas, which describe what external clients are
-allowed to send and receive.
+This directory currently has no files and is not used by the Docker build.
+Docker's actual build instructions are in the root `Dockerfile`; excluded
+build-context paths are listed in `.dockerignore`.
 
-### `src/backend/schemas/`
+## Run the main app locally
 
-This package is for request and response contracts, commonly implemented with
-Pydantic models in a FastAPI application. It is currently a placeholder.
-Examples for the future include `TaskCreate`, `RunResponse`, `AgentStatus`,
-and `WorkflowEvent`.
-
-Schemas validate untrusted API input and make API responses consistent. They
-should avoid exposing internal database fields, private prompts, credentials,
-or sensitive tool output by accident.
-
-### `src/backend/services/`
-
-This package is for application and business logic. It is currently a
-placeholder and is the most natural home for the agentic-AI use cases.
-Possible services include:
-
-- `orchestrator.py` - plans and coordinates multi-agent workflows;
-- `agent_service.py` - creates agents and manages their lifecycle;
-- `model_service.py` - provides a common interface to language models;
-- `tool_service.py` - validates and executes approved tools;
-- `memory_service.py` - stores and retrieves short-term and long-term memory;
-- `task_service.py` - manages task state, results, and failures; and
-- `review_service.py` - applies human approval or quality gates.
-
-Services should coordinate these operations and return structured results to
-the API layer. They should also enforce guardrails such as allowed tools,
-budgets, timeouts, retries, permissions, and maximum workflow depth.
-
-## How the backend can support agentic AI
-
-The existing layout is a foundation, not yet a complete agentic-AI system.
-The current implementation exposes only a root endpoint and a health check.
-A typical future request could follow this path:
-
-```text
-Client request
-    -> API route and request schema
-    -> Task or run service
-    -> Multi-agent orchestrator
-    -> Specialist agents and approved tools
-    -> Memory, database, or external systems
-    -> Structured result and run status
-    -> API response
-```
-
-Recommended responsibilities are:
-
-- **Orchestrator:** decomposes a task, selects agents, coordinates handoffs,
-  tracks state, and decides when the workflow is complete.
-- **Agents:** perform focused roles such as planning, research, coding,
-  validation, or summarization. Each agent should have a clear input, output,
-  model policy, and tool permission set.
-- **Tools:** provide controlled access to APIs, files, databases, Kubernetes,
-  or CI/CD systems. Every tool call should be authenticated, validated, and
-  logged.
-- **Memory:** stores only the context needed by a workflow or user. Sensitive
-  data should have an explicit retention and access policy.
-- **Workflow state:** records queued, running, waiting-for-approval,
-  completed, and failed states so long-running work can be resumed safely.
-- **Observability:** records model calls, token or cost usage, tool calls,
-  failures, latency, and final outcomes without logging secrets.
-
-For long-running workflows, the API should return a run ID and status rather
-than holding an HTTP request open while agents work. A worker or queue can
-execute the workflow, while clients poll a status endpoint or receive events.
-
-## Why the `tests/` folder is used
-
-The `tests/` folder contains automated checks that verify the application
-behaves as expected. Tests catch regressions when routes, schemas, agent
-prompts, orchestration rules, or infrastructure code change. They also make
-the project safer to refactor and provide executable documentation of the
-expected behavior.
-
-The current file, `tests/test_health.py`, uses FastAPI's `TestClient` to check
-that:
-
-- `GET /api/v1/health` returns HTTP 200; and
-- the response body is exactly `{"status": "ok"}`.
-
-As agent functionality is added, useful test layers include:
-
-- **Unit tests:** test an agent, service, schema, policy, or tool adapter in
-  isolation using mocks or deterministic fake model responses.
-- **Workflow tests:** verify routing, handoffs, retries, timeouts, approval
-  gates, and failure recovery across multiple agents.
-- **API tests:** verify authentication, validation, status endpoints, and
-  response contracts through FastAPI's test client.
-- **Integration tests:** verify database, queue, vector store, model provider,
-  and Kubernetes integrations using isolated test resources.
-- **Evaluation tests:** measure answer quality, tool-use correctness,
-  groundedness, safety, latency, and cost against representative tasks.
-
-Agent tests should avoid depending on live model output whenever possible.
-Use fixed test doubles for normal CI runs, and run separate evaluation tests
-when a real model provider is required.
-
-## Other important project folders and files
-
-- `k8s/base/` - Kubernetes manifests for the deployment, service, and
-  configuration.
-- `scripts/run_local.sh` - helper script for starting the application locally.
-- `.github/workflows/ci.yml` - GitHub Actions workflow that installs the
-  project, runs tests, and builds the package.
-- `Dockerfile` - instructions for building the application container.
-- `main.py` - simple local entry point that delegates to the backend app.
-
-## Run locally
+From the repository root, install frontend dependencies once after cloning:
 
 ```bash
-uv run python main.py
+npm --prefix app/frontend ci
 ```
 
-Or:
+Start the portfolio whenever you want to run it:
 
 ```bash
-uv run uvicorn src.backend.main:app --reload
+npm --prefix app/frontend run dev
 ```
 
-Or via script:
+Open the Vite URL (normally `http://localhost:5173`) and stop the server with
+`Ctrl+C`. An internet connection is needed to fetch public repositories.
+New public repositories appear when a visitor opens or refreshes the page.
+
+The portfolio defaults to the `skc-charchit` GitHub account. Set
+`VITE_GITHUB_USERNAME` in the frontend environment before starting Vite to use
+a different public profile. Forked and archived repositories are omitted.
+Project cards link to the GitHub homepage when configured, or to the
+repository otherwise.
+
+## Build the Project guide feature separately
+
+It is not needed to run the main app:
 
 ```bash
-bash scripts/run_local.sh
+npm --prefix app/features/project-guide ci
+npm --prefix app/features/project-guide run build
 ```
 
-## Run tests
+## Future GoDaddy hosting
+
+Build the standalone portfolio:
+
+```bash
+npm --prefix app/frontend ci
+npm --prefix app/frontend run build
+```
+
+Upload the **contents** of `app/frontend/dist/` to the document root of a
+GoDaddy hosting plan that supports static websites (commonly `public_html` on
+cPanel hosting). Do not upload `node_modules/`. Domain/DNS steps depend on the
+specific hosting plan.
+
+## Run the backend separately
+
+The backend is a development foundation and is not connected to the portfolio:
+
+```bash
+uv sync --dev
+uv run uvicorn backend.main:app --reload --app-dir app/backend/src
+```
+
+Its current routes are `GET /`, `GET /api/v1/health`, and
+`POST /api/v1/examples/echo`. The echo endpoint is an example, not an AI
+workflow. See the API docs at `http://localhost:8000/docs` after starting it.
+
+## Root configuration and project files
+
+- **`pyproject.toml`** declares Python runtime requirements, backend
+  dependencies, package build configuration, pytest paths, and Ruff rules.
+- **`uv.lock`** locks Python dependencies for reproducible `uv sync` installs.
+- **`.python-version`** records the preferred Python version for compatible
+  version managers.
+- **`.env.example`** shows local backend settings. Copy it to `.env` for local
+  configuration; never commit real secrets.
+- **`Dockerfile`** builds the backend container. It is not required for the
+  static frontend or GoDaddy hosting.
+- **`main.py`** is a convenience backend launcher; Uvicorn's documented
+  command is the usual development entry point.
+- **`.dockerignore`** excludes local dependencies, secrets, caches, and build
+  output from Docker context.
+- **`.gitignore`** excludes local environments, caches, and generated assets.
+- **`LICENSE`** contains the project's license terms.
+- **`kubectl`** is a bundled Linux x86-64 Kubernetes CLI binary. The source
+  code and local frontend do not depend on it; Kubernetes users may use their
+  own compatible `kubectl` installation.
+
+Directories such as `.venv/`, `node_modules/`, `dist/`, and cache folders are
+generated/local artifacts, not source folders. They should not be committed.
+
+## Quality checks
 
 ```bash
 uv run pytest -q
+uv run ruff check app/backend/src app/backend/tests scripts
+uv run ruff format --check app/backend/src app/backend/tests scripts
+uv run python scripts/export_openapi.py --check
+npm --prefix app/frontend ci
+npm --prefix app/frontend run build
+npm --prefix app/features/project-guide ci
+npm --prefix app/features/project-guide run build
 ```
 
-## Health check
-
-```text
-GET /api/v1/health
-```
-
-Response:
-
-```json
-{"status": "ok"}
-```
-
-## GitHub Actions CI
-
-The workflow in `.github/workflows/ci.yml` performs:
-
-- checkout code
-- setup Python
-- install dependencies
-- run tests
-- build the package
-
-## Kubernetes
-
-The manifests in `k8s/base/` provide a starting point for deploying the app in Kubernetes:
-
-- `deployment.yaml` - deployment configuration
-- `service.yaml` - service exposure
-- `configmap.yaml` - environment configuration
-
-## Notes
-
-This repository currently provides a clean FastAPI backend scaffold with
-containerization, Kubernetes deployment foundations, and CI/CD automation. To
-turn it into a production-ready agentic-AI platform, implement the agent,
-orchestrator, tool, memory, workflow-state, and evaluation services described
-above while preserving the separation between API, services, persistence,
-and domain models.
+GitHub Actions runs these checks and package builds. Deployment/publishing is
+not configured yet.

@@ -17,8 +17,25 @@ spec:
           image: your-registry/backend-app:latest
           ports:
             - containerPort: 8000
-          env:
-            - name: APP_NAME
-              value: "backend-app"
-            - name: DEBUG
-              value: "False"
+          envFrom:
+            - configMapRef:
+                name: backend-app-config
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

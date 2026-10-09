@@ -1,20 +1,8 @@
-# apiVersion: v1
-# kind: ConfigMap
-# metadata:
-#   name: backend-app-config
-# data:
-#   APP_NAME: "backend-app"
-#   DEBUG: "false"
-#   API_V1_PREFIX: "/api/v1"
-
-
 apiVersion: v1
-kind: Pod
+kind: ConfigMap
 metadata:
-  name: nginx
-spec:
-  containers:
-  - name: nginx
-    image: nginx:1.14.2
-    ports:
-    - containerPort: 80
+  name: backend-app-config
+data:
+  APP_NAME: "Feature Studio"
+  DEBUG: "false"
+  CORS_ORIGINS: '["https://frontend.example.com"]'

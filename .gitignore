@@ -218,3 +218,12 @@ __marimo__/
 .streamlit/secrets.toml
 
 .k8s
+
+# Frontend
+node_modules/
+app/frontend/dist/
+app/frontend/.vite/
+app/frontend/*.tsbuildinfo
+app/frontend/vite.config.js
+app/frontend/vite.config.d.ts
+npm-debug.log*
