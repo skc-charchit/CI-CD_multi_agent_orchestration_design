@@ -228,3 +228,4 @@ app/frontend/*.tsbuildinfo
 app/frontend/vite.config.js
 app/frontend/vite.config.d.ts
 npm-debug.log*
+.env

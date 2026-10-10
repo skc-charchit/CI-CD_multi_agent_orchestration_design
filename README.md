@@ -35,7 +35,7 @@ main app deliberately when their interfaces and behavior are ready.
 │       │   ├── core/                     # Application-wide infrastructure
 │       │   ├── db/                       # Shared engine, sessions, ORM base, CRUD helpers
 │       │   ├── features/                 # Backend feature vertical slices
-│       │   ├── models/                   # Future domain/persistence models
+│       │   ├── models/                   # SQLAlchemy persistence models
 │       │   └── main.py                   # FastAPI app composition root
 │       └── tests/                        # Backend test suite
 ├── docs/
@@ -44,7 +44,9 @@ main app deliberately when their interfaces and behavior are ready.
 ├── .github/workflows/                    # GitHub Actions automation
 ├── k8s/base/                             # Backend Kubernetes starter manifests
 ├── scripts/                              # Repository-level developer utilities
+├── redundant/                            # Holding folder; no scripts marked obsolete
 ├── .docker/                              # Currently empty; unused
+├── compose.yaml                          # Local FastAPI + PostgreSQL services
 ├── Dockerfile                            # Backend container build
 ├── main.py                               # Optional backend launch wrapper
 ├── pyproject.toml                        # Python metadata, dependencies, tools
@@ -137,8 +139,8 @@ This is the Python application package in the standard `src` layout.
     feature-owned routers.
   - `routes/health.py` provides the process health endpoint.
 - **`core/`** contains application-wide concerns. `config.py` loads settings
-  such as the app name, debug mode, and CORS origins from environment
-  variables/`.env`.
+  such as the app name, debug mode, and CORS origins from process environment
+  variables. It does not load a `.env` file.
 - **`features/`** holds backend business capabilities:
   - **`echo/`** is a small working vertical slice. `api/routes.py` handles the
     HTTP boundary, `schemas.py` validates request/response data, and
@@ -149,7 +151,7 @@ This is the Python application package in the standard `src` layout.
 - **`db/`** separates PostgreSQL engine/configuration (`engine.py`),
   request-scoped sessions (`session.py`), the declarative model base
   (`base.py`), and generic SQLAlchemy CRUD helpers (`crud.py`). Feature-owned
-  models and repositories use these shared primitives.
+  models use these shared primitives.
 - **`models/`** contains the `AgentQuery` SQLAlchemy model used to store each
   completed agent turn, its UTC timestamps, and tool activity. The API
   contracts remain Pydantic schemas inside their features.
@@ -289,6 +291,23 @@ uv sync --dev
 direnv exec . uv run uvicorn backend.main:app --reload --app-dir app/backend/src
 ```
 
+To run the backend and PostgreSQL together in Docker Compose, ensure the
+ignored `.envrc` exports `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`,
+`OPENAI_API_KEY`, and `AGENT_API_KEY`, then run:
+
+```bash
+direnv exec . docker compose up --build
+```
+
+Compose waits for PostgreSQL to pass its readiness check before starting the
+backend. Swagger is available at `http://localhost:8000/docs`. Both published
+ports are bound to localhost; set `APP_PORT` or `POSTGRES_PUBLISH_PORT` to
+change their host ports. PostgreSQL data persists in the `postgres_data`
+named volume across container restarts and `docker compose down`.
+
+Stop the services with `Ctrl+C`, or run `direnv exec . docker compose down` in
+another terminal.
+
 For local development, keep credentials and settings in the ignored
 repository `.envrc` file. The backend reads process environment variables and
 does not load a `.env` file:
@@ -326,8 +345,8 @@ activity to PostgreSQL's `agent_queries` table. `OPENAI_MAX_TOKENS` limits
 generated response tokens (default `1024`) and can be lowered to fit a provider
 credit limit. The terminal agent uses the same persistence service. OpenAI
 requests may incur provider charges. For an
-OpenAI-compatible service, configure `OPENAI_BASE_URL` as well. The
-chat endpoint requires an `Authorization: Bearer`
+OpenAI-compatible service, configure `OPENAI_BASE_URL` as well. The chat
+endpoint requires an `Authorization: Bearer`
 token matching `AGENT_API_KEY`; keep that token on trusted server-side clients,
 not in browser code. See `http://localhost:8000/docs` after starting the
 backend.
@@ -359,6 +378,10 @@ Directories such as `.venv/`, `node_modules/`, `dist/`, and cache folders are
 generated/local artifacts, not source folders. They should not be committed.
 
 ## Quality checks
+
+The backend tests are named for the behaviors they cover: root and health
+routes, echo API validation, Agentic AI API and persistence, Agentic AI model
+configuration, and database configuration/CRUD.
 
 ```bash
 uv run pytest -q

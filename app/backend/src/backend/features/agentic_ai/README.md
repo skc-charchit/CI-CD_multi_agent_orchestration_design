@@ -42,11 +42,9 @@ app/backend/src/backend/features/agentic_ai/
 └── models.py               # Feature domain types, when needed
 
 app/backend/tests/
-└── features/
-    └── agentic_ai/
-        ├── test_graph.py
-        ├── test_service.py
-        └── test_api.py
+├── test_agentic_ai_api.py
+├── test_agentic_ai_model.py
+└── test_database_config_crud.py
 ```
 
 Do not create empty modules just to match the diagram. For an initial
@@ -91,6 +89,11 @@ saved conversations, resumable runs, or durable history.
 Tests belong under `app/backend/tests/`, not inside the runtime feature
 package. Keep graph behavior, service policy, and FastAPI contract tests
 separate so each layer can be tested without real provider calls.
+In this repository, `test_agentic_ai_api.py` covers authenticated chat and
+history routes, persistence, and history pagination;
+`test_agentic_ai_model.py` covers provider configuration and tool binding.
+Shared PostgreSQL setup and CRUD behavior are covered by
+`test_database_config_crud.py`.
 
 ## LangGraph and LangSmith responsibilities
 
@@ -117,7 +120,8 @@ through deployment secrets. Set `OPENAI_BASE_URL` only when using an
 OpenAI-compatible provider with a custom endpoint. The backend reads process
 environment variables and does not load `.env`. Keep real keys only in
 ignored local configuration or a deployment secret store, never in tracked
-source or logs.
+source or logs. `OPENAI_MAX_TOKENS` caps generated response tokens (default
+`1024`); lower it if needed to fit the provider's available credit.
 
 `PROJECT_NAME` and `PROJECT_NUMBER` are currently exported for local use but
 are not consumed by this feature. A valid provider API key is needed when a
