@@ -18,14 +18,27 @@ HTTP request
   -> backend/features/<name>/api/routes.py
   -> backend/features/<name>/schemas.py
   -> backend/features/<name>/service.py
-  -> backend/features/<name>/repository.py (when persistence is introduced)
+  -> backend/features/<name>/repository.py
+  -> backend/db/crud.py (shared ORM operations)
+  -> backend/db/session.py (shared PostgreSQL sessions)
 ```
 
 - **API routes** translate HTTP inputs to feature use cases and declare
   response models/status codes. They do not contain orchestration or SQL.
 - **Schemas** validate untrusted input and define the public API contract.
 - **Services** implement feature use cases and coordinate domain work.
-- **Repositories** isolate persistence when a database is added.
+- **Repositories** isolate feature persistence from the shared database
+  sessions provided by `backend/db/session.py`.
+- **Database modules** separate engine/configuration in
+  `backend/db/engine.py`, the declarative ORM base in `backend/db/base.py`,
+  request-scoped sessions in `backend/db/session.py`, and generic operations
+  in `backend/db/crud.py`. Feature repositories should own domain-specific
+  queries and transaction boundaries.
+- **Database sessions** use PostgreSQL settings from `DATABASE_URL` or
+  `POSTGRES_*` environment variables. Configured connections are checked during
+  application startup; the `agent_queries` table is created if missing.
+  Health/echo endpoints can run without database settings, but Agentic AI
+  requires PostgreSQL so completed turns are not returned unsaved.
 - **Core** contains shared configuration and infrastructure. Avoid putting
   feature-specific behavior here.
 - **API router** composes feature routers and applies the version prefix.

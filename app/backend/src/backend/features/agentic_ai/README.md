@@ -110,18 +110,38 @@ tool outputs.
 
 ## Local provider configuration
 
-The current model factory uses Gemini 3.8 Flash through
-`langchain-google-genai`. It reads `GOOGLE_API_KEY` from the process
-environment. The repository-local `.envrc` is Git-ignored; it exports
-`GOOGLE_API_KEY`, `PROJECT_NAME`, and `PROJECT_NUMBER` for shells using
-direnv. After editing `.envrc`, run `direnv allow` in the repository if
-direnv asks for approval. Keep real keys only in ignored local configuration
-or a deployment secret store, never in tracked source or logs.
+The model factory uses OpenAI's `gpt-4o` model by default through
+`langchain-openai`. Configure `OPENAI_API_KEY` and optionally `OPENAI_MODEL`
+in the ignored repository `.envrc` for local development, or inject them
+through deployment secrets. Set `OPENAI_BASE_URL` only when using an
+OpenAI-compatible provider with a custom endpoint. The backend reads process
+environment variables and does not load `.env`. Keep real keys only in
+ignored local configuration or a deployment secret store, never in tracked
+source or logs.
 
 `PROJECT_NAME` and `PROJECT_NUMBER` are currently exported for local use but
-are not consumed by this feature. A valid `GOOGLE_API_KEY` is needed when a
-request actually invokes Gemini; importing the feature and running
-credential-free unit tests do not initialize the provider client.
+are not consumed by this feature. A valid provider API key is needed when a
+request invokes the model; importing the feature and running credential-free
+unit tests do not initialize the provider client. A placeholder key will not
+authenticate against OpenAI's official API.
+
+## HTTP API
+
+The synchronous endpoint is `POST /api/v1/agentic-ai/chat` with a JSON body
+such as `{"message":"What is 19 + 23?"}`. It returns an `answer` string.
+Messages are limited to 2,000 characters and require
+`Authorization: Bearer <AGENT_API_KEY>` from a trusted server-side client.
+Keep this key out of browser code. Each request is a separate turn. Successful
+answers are stored in PostgreSQL's `agent_queries` table with the input/output
+UTC timestamps and tool calls. Missing provider or database configuration is
+reported as a service-unavailable response rather than a fabricated or
+unsaved answer.
+
+Use the authenticated `GET /api/v1/agentic-ai/history` endpoint in Swagger
+(`http://localhost:8000/docs`) to inspect saved turns. It returns questions,
+answers, UTC timestamps, and tool calls/results, newest first. `limit` (1–100,
+default 50) and `offset` query parameters paginate the results. Authorize in
+Swagger with the same server-side bearer token configured as `AGENT_API_KEY`.
 
 ## Run the agent interactively
 
@@ -132,11 +152,14 @@ direnv exec . uv run python -m backend.features.agentic_ai
 ```
 
 Type a question such as `What is 19 + 23?`; the terminal displays the tool
-call/result when Gemini uses an arithmetic tool, followed by the agent's
-answer. Enter `/reset` to clear the in-memory conversation or `/quit` to exit.
-Each prompt is sent to Gemini, so provider usage and charges may apply. This
-starts the local graph directly; it does not start FastAPI, expose an HTTP
-endpoint, or save conversation history.
+call/result when the model uses an arithmetic tool, followed by the agent's
+answer. Each successfully answered turn is saved in PostgreSQL's
+`agent_queries` table with UTC input/output timestamps and the tool names,
+arguments, and results. Enter `/reset` to clear only the in-memory context or
+`/quit` to exit; saved rows are not removed. PostgreSQL settings and
+`OPENAI_API_KEY` must be configured before starting. Each prompt is sent to
+OpenAI (or the configured compatible endpoint), so provider usage and charges
+may apply. This starts the local graph directly and does not start FastAPI.
 
 ## Implement in this order
 
@@ -191,10 +214,10 @@ complete public job API.
 
 ## Current status
 
-The feature now contains a LangGraph arithmetic workflow, typed state, and
-add/multiply/divide tools. Its model factory is configured for Gemini and is
-created lazily, but no chatbot route invokes it yet. The FastAPI app does not
-yet expose chatbot endpoints, use LangSmith tracing, or store conversations.
-The echo example remains the only registered feature API. Keep the live
-OpenAPI contract and user-facing claims consistent with what has actually
-been implemented.
+The feature contains a LangGraph arithmetic workflow, typed state, and
+add/multiply/divide tools. The terminal app and authenticated FastAPI chat
+route use the same service to persist completed turns in PostgreSQL.
+Persistence failures are surfaced rather than returning an unsaved success.
+Conversation context in the terminal remains process-local; persisted records
+are an audit/history log and are not automatically replayed into later
+sessions. LangSmith tracing is not configured.
