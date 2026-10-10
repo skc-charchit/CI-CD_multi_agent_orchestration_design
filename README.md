@@ -33,7 +33,7 @@ main app deliberately when their interfaces and behavior are ready.
 │       ├── src/backend/                  # FastAPI Python package
 │       │   ├── api/                      # Shared API routing/composition
 │       │   ├── core/                     # Application-wide infrastructure
-│       │   ├── db/                       # Future persistence infrastructure
+│       │   ├── db/                       # Shared engine, sessions, ORM base, CRUD helpers
 │       │   ├── features/                 # Backend feature vertical slices
 │       │   ├── models/                   # Future domain/persistence models
 │       │   └── main.py                   # FastAPI app composition root
@@ -143,23 +143,31 @@ This is the Python application package in the standard `src` layout.
   - **`echo/`** is a small working vertical slice. `api/routes.py` handles the
     HTTP boundary, `schemas.py` validates request/response data, and
     `service.py` implements the example use case.
-  - **`agentic_ai/`** is reserved for agentic workflow code. Its README
-    describes the intended module layout and links to the API proposal. No
-    agent endpoint, worker, queue, model provider, or durable run store is
-    implemented yet.
-- **`db/`** is currently a placeholder for database sessions and repository
-  implementations; the current app does not persist data.
-- **`models/`** is currently a placeholder for internal domain or persistence
-  models. API contracts are currently defined with Pydantic schemas inside
-  their features instead.
+  - **`agentic_ai/`** contains the LangGraph arithmetic workflow, OpenAI model
+    integration, authenticated chat API route, and terminal interface.
+    Completed turns from either interface are saved to PostgreSQL.
+- **`db/`** separates PostgreSQL engine/configuration (`engine.py`),
+  request-scoped sessions (`session.py`), the declarative model base
+  (`base.py`), and generic SQLAlchemy CRUD helpers (`crud.py`). Feature-owned
+  models and repositories use these shared primitives.
+- **`models/`** contains the `AgentQuery` SQLAlchemy model used to store each
+  completed agent turn, its UTC timestamps, and tool activity. The API
+  contracts remain Pydantic schemas inside their features.
 - **`__init__.py` files** mark Python package directories for imports.
 
 #### `app/backend/tests/`
 
-`test_health.py` checks the root overview and health endpoint.
-`test_examples.py` verifies echo input validation, the response contract, and
-the configured frontend CORS preflight. Keep API tests and service tests here
-as backend capabilities are implemented.
+- `test_root_and_health_api.py` checks the root overview and health endpoint.
+- `test_echo_api.py` verifies echo input validation, the response contract, and
+  the configured frontend CORS preflight.
+- `test_agentic_ai_api.py` checks authenticated chat/history routes and turn
+  persistence.
+- `test_agentic_ai_model.py` verifies OpenAI model configuration and tool
+  binding.
+- `test_database_config_crud.py` covers PostgreSQL configuration, schema
+  initialization, and shared CRUD helpers.
+
+Keep API tests and service tests here as backend capabilities are implemented.
 
 ### `docs/` — maintained project documentation
 
@@ -278,12 +286,51 @@ The backend is a development foundation and is not connected to the portfolio:
 
 ```bash
 uv sync --dev
-uv run uvicorn backend.main:app --reload --app-dir app/backend/src
+direnv exec . uv run uvicorn backend.main:app --reload --app-dir app/backend/src
 ```
 
-Its current routes are `GET /`, `GET /api/v1/health`, and
-`POST /api/v1/examples/echo`. The echo endpoint is an example, not an AI
-workflow. See the API docs at `http://localhost:8000/docs` after starting it.
+For local development, keep credentials and settings in the ignored
+repository `.envrc` file. The backend reads process environment variables and
+does not load a `.env` file:
+
+```bash
+export POSTGRES_HOST=localhost
+export POSTGRES_PORT=5432
+export POSTGRES_DB=agent_db
+export POSTGRES_USER=agent_app
+export POSTGRES_PASSWORD=<your-local-password>
+export OPENAI_API_KEY=<your-openai-api-key>
+export OPENAI_MODEL=gpt-4o
+# Optional for an OpenAI-compatible provider:
+export OPENAI_BASE_URL=<provider-base-url>
+export OPENAI_MAX_TOKENS=1024
+export AGENT_API_KEY=<long-random-server-only-token>
+```
+
+The backend verifies the connection at startup and creates the `agent_queries`
+table if it is missing. It accepts either `DATABASE_URL` or the shown
+`POSTGRES_*` variables. Health/echo routes can start without database settings,
+but agent chat returns `503` and cannot answer unless persistence is available.
+The terminal agent checks for a configured, reachable database before
+starting.
+
+Its current routes are `GET /`, `GET /api/v1/health`,
+`POST /api/v1/examples/echo`, `POST /api/v1/agentic-ai/chat`, and
+`GET /api/v1/agentic-ai/history`. The history endpoint lets an authenticated
+caller browse saved questions, answers, timestamps, and tool activity through
+Swagger. The chat
+endpoint invokes the configured OpenAI model; it requires a valid
+`OPENAI_API_KEY`, uses `OPENAI_MODEL` (default `gpt-4o`), and handles one message per
+request and saves its question, answer, input/output timestamps, and tool
+activity to PostgreSQL's `agent_queries` table. `OPENAI_MAX_TOKENS` limits
+generated response tokens (default `1024`) and can be lowered to fit a provider
+credit limit. The terminal agent uses the same persistence service. OpenAI
+requests may incur provider charges. For an
+OpenAI-compatible service, configure `OPENAI_BASE_URL` as well. The
+chat endpoint requires an `Authorization: Bearer`
+token matching `AGENT_API_KEY`; keep that token on trusted server-side clients,
+not in browser code. See `http://localhost:8000/docs` after starting the
+backend.
 
 ## Root configuration and project files
 
@@ -292,8 +339,10 @@ workflow. See the API docs at `http://localhost:8000/docs` after starting it.
 - **`uv.lock`** locks Python dependencies for reproducible `uv sync` installs.
 - **`.python-version`** records the preferred Python version for compatible
   version managers.
-- **`.env.example`** shows local backend settings. Copy it to `.env` for local
-  configuration; never commit real secrets.
+- **`.envrc`** provides local environment variables through direnv. It is
+  ignored by Git; never commit real secrets.
+- Deployment environments should inject settings through their secret
+  management system.
 - **`Dockerfile`** builds the backend container. It is not required for the
   static frontend or GoDaddy hosting.
 - **`main.py`** is a convenience backend launcher; Uvicorn's documented

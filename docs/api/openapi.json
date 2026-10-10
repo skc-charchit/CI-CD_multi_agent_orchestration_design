@@ -1,6 +1,136 @@
 {
   "components": {
     "schemas": {
+      "AgentChatRequest": {
+        "description": "A single message submitted to the arithmetic agent.",
+        "properties": {
+          "message": {
+            "description": "Question or instruction for the arithmetic assistant.",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "AgentChatRequest",
+        "type": "object"
+      },
+      "AgentChatResponse": {
+        "description": "The agent's final user-facing answer.",
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "answer"
+        ],
+        "title": "AgentChatResponse",
+        "type": "object"
+      },
+      "AgentHistoryResponse": {
+        "description": "A page of persisted agent turns.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AgentQueryResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "AgentHistoryResponse",
+        "type": "object"
+      },
+      "AgentQueryResponse": {
+        "description": "One persisted question, answer, timestamp pair, and tool activity.",
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "input_at": {
+            "format": "date-time",
+            "title": "Input At",
+            "type": "string"
+          },
+          "output_at": {
+            "format": "date-time",
+            "title": "Output At",
+            "type": "string"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "tools_used": {
+            "items": {
+              "$ref": "#/components/schemas/AgentToolUsage"
+            },
+            "title": "Tools Used",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "question",
+          "answer",
+          "input_at",
+          "output_at",
+          "tools_used"
+        ],
+        "title": "AgentQueryResponse",
+        "type": "object"
+      },
+      "AgentToolUsage": {
+        "description": "A tool invoked while producing an agent answer.",
+        "properties": {
+          "arguments": {
+            "additionalProperties": true,
+            "title": "Arguments",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "result": {
+            "title": "Result"
+          }
+        },
+        "required": [
+          "name",
+          "arguments"
+        ],
+        "title": "AgentToolUsage",
+        "type": "object"
+      },
       "EchoRequest": {
         "description": "Text submitted by a client to verify API connectivity.",
         "properties": {
@@ -100,6 +230,12 @@
         "title": "ValidationError",
         "type": "object"
       }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
     }
   },
   "info": {
@@ -132,6 +268,115 @@
         "summary": "API overview",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/api/v1/agentic-ai/chat": {
+      "post": {
+        "description": "Generate and persist the answer for a single message.",
+        "operationId": "chat_api_v1_agentic_ai_chat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentChatResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Ask the arithmetic assistant",
+        "tags": [
+          "agentic-ai"
+        ]
+      }
+    },
+    "/api/v1/agentic-ai/history": {
+      "get": {
+        "description": "Return persisted turns, newest first, for viewing in Swagger.",
+        "operationId": "history_api_v1_agentic_ai_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentHistoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List saved agent turns",
+        "tags": [
+          "agentic-ai"
         ]
       }
     },

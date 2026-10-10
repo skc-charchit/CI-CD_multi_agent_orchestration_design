@@ -2,8 +2,11 @@
 
 from collections.abc import Sequence
 
-from backend.features.agentic_ai.compile_agent import agent
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from backend.db.schema import create_schema
+from backend.db.session import SessionLocal
+from backend.features.agentic_ai.service import AgentTurn, answer_message
+from langchain_core.messages import AIMessage, AnyMessage, ToolMessage
+from sqlalchemy.exc import SQLAlchemyError
 
 
 def _content_text(content: object) -> str:
@@ -27,7 +30,9 @@ def _print_tool_activity(messages: Sequence[object]) -> None:
     for message in messages:
         if isinstance(message, AIMessage):
             for call in message.tool_calls:
-                call_names[call["id"]] = call["name"]
+                call_id = call["id"]
+                if call_id is not None:
+                    call_names[call_id] = call["name"]
                 print(f"  Tool: {call['name']}({call['args']})")
         elif isinstance(message, ToolMessage):
             name = call_names.get(message.tool_call_id, "tool")
@@ -39,7 +44,20 @@ def run_cli() -> None:
     print("Agentic AI arithmetic assistant")
     print("Enter a question, /reset to clear conversation, or /quit to exit.")
 
-    history: list[HumanMessage | AIMessage | ToolMessage] = []
+    try:
+        create_schema(required=True)
+    except (RuntimeError, SQLAlchemyError) as error:
+        print(
+            f"Database setup failed ({type(error).__name__}). "
+            "Check PostgreSQL configuration and connectivity."
+        )
+        return
+
+    if SessionLocal is None:
+        print("Database is not configured; agent turns cannot be saved.")
+        return
+
+    history: list[AnyMessage] = []
     while True:
         try:
             prompt = input("\nYou: ").strip()
@@ -57,29 +75,17 @@ def run_cli() -> None:
             print("Conversation cleared.")
             continue
 
-        previous_history = history
         try:
-            result = agent.invoke(
-                {"messages": [*previous_history, HumanMessage(content=prompt)]}
-            )
+            with SessionLocal() as session:
+                turn: AgentTurn = answer_message(prompt, session, history)
         except Exception as error:
             print(f"Agent error ({type(error).__name__}): {error}")
             continue
 
-        history = result["messages"]
-        turn_messages = history[len(previous_history) :]
-        _print_tool_activity(turn_messages)
-
-        response = next(
-            (
-                message
-                for message in reversed(turn_messages)
-                if isinstance(message, AIMessage) and not message.tool_calls
-            ),
-            None,
-        )
-        answer = _content_text(response.content) if response else ""
-        print(f"Agent: {answer or '[No text response returned]'}")
+        history = turn.messages
+        _print_tool_activity(turn.activity_messages)
+        print(f"Agent: {turn.answer}")
+        print(f"Saved query #{turn.record_id} at {turn.output_at.isoformat()}")
 
 
 if __name__ == "__main__":
