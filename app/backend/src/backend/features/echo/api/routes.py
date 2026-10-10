@@ -1,9 +1,8 @@
 """HTTP routes for the echo example feature."""
 
-from fastapi import APIRouter
-
 from backend.features.echo.schemas import EchoRequest, EchoResponse
 from backend.features.echo.service import echo_message
+from fastapi import APIRouter
 
 router = APIRouter(prefix="/examples", tags=["echo"])
 

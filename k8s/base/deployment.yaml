@@ -12,9 +12,11 @@ spec:
       labels:
         app: backend-app
     spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
       containers:
         - name: backend-app
-          image: your-registry/backend-app:latest
+          image: ghcr.io/skc-charchit/backend-app:latest
           ports:
             - containerPort: 8000
           envFrom:

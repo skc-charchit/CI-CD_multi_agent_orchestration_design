@@ -1,10 +1,9 @@
 """FastAPI application factory and top-level composition."""
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
 from backend.api.router import API_V1_PREFIX, api_router
 from backend.core.config import settings
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 
 def create_app() -> FastAPI:
