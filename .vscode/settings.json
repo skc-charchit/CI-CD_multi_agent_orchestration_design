@@ -1,0 +1,28 @@
+{
+    "sqltools.connections": [
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "pg_local",
+            "database": "sql_practice",
+            "username": "postgres",
+            "connectionTimeout": 30,
+            "password": "admin"
+        },
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "Agent_DB",
+            "database": "agent_db",
+            "username": "postgres",
+            "password": "admin",
+            "connectionTimeout": 30
+        }
+    ]
+}
