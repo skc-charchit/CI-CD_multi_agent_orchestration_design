@@ -174,11 +174,32 @@ as backend capabilities are implemented.
 
 ### `.github/workflows/` — CI/CD automation
 
-`ci.yml` runs on pushes to `main` and pull requests. It installs Python and
-Node dependencies, runs backend tests and Ruff checks, verifies the OpenAPI
-snapshot, builds the portfolio independently, builds the Project guide
-independently, and builds the Python package. It validates changes; it does
-not currently publish or deploy the website.
+- `ci.yml` runs on pull requests to `main` and pushes to `main`. Independent
+  jobs install locked dependencies, test and lint the backend, check the
+  OpenAPI snapshot, build the frontend and Project guide, build the Python
+  package, and verify that the backend Docker image builds.
+- `cd.yml` runs only after successful CI on `main`. It deploys the portfolio
+  to GitHub Pages, publishes the backend image to GHCR, and deploys that
+  immutable image digest to Kubernetes.
+
+To enable deployment:
+
+1. In repository **Settings → Pages**, set the source to **GitHub Actions**.
+2. Create a GitHub Actions environment named `production`. Add the environment
+   secrets `KUBE_CONFIG` (the deployment cluster's kubeconfig),
+   `GHCR_PULL_USERNAME`, and `GHCR_PULL_TOKEN` (a read-only GHCR package token
+   for the cluster to pull the private image). Restrict the environment to
+   `main` and configure required reviewers if production approval is wanted.
+3. Optionally add the environment variable `K8S_NAMESPACE`; it defaults to
+   `default`. Create that namespace before the first deploy. The kubeconfig
+   identity must be allowed to create/update the deployment, service, config
+   map, and `ghcr-pull-secret` in that namespace.
+4. Ensure the GHCR package `backend-app` is associated with this repository.
+   The workflow refreshes the Kubernetes `ghcr-pull-secret` on each deploy.
+
+The deploy workflow checks out the exact commit that passed CI and waits for
+the Kubernetes rollout. Deployments are serialized so an older run cannot
+cancel a newer production rollout.
 
 ### `k8s/base/` — backend Kubernetes starting point
 
@@ -188,7 +209,9 @@ not currently publish or deploy the website.
 - `configmap.yaml` supplies non-secret settings. Production secrets should
   come from a Kubernetes Secret or external secret manager.
 
-These manifests do not deploy the static portfolio to GoDaddy.
+The CD workflow applies these resources and updates the deployment to the
+published image digest. The static portfolio is deployed separately to
+GitHub Pages.
 
 ### `scripts/` — repository utilities
 
@@ -235,19 +258,19 @@ npm --prefix app/features/project-guide ci
 npm --prefix app/features/project-guide run build
 ```
 
-## Future GoDaddy hosting
+## GitHub Pages deployment
 
-Build the standalone portfolio:
+The CI/CD workflow publishes the standalone portfolio to GitHub Pages after
+successful CI on `main`. Enable **Settings → Pages → GitHub Actions** and
+merge to `main` to deploy it. To build the static site locally:
 
 ```bash
 npm --prefix app/frontend ci
 npm --prefix app/frontend run build
 ```
 
-Upload the **contents** of `app/frontend/dist/` to the document root of a
-GoDaddy hosting plan that supports static websites (commonly `public_html` on
-cPanel hosting). Do not upload `node_modules/`. Domain/DNS steps depend on the
-specific hosting plan.
+The generated files are in `app/frontend/dist/`. The backend is deployed
+independently to Kubernetes; the portfolio currently does not call it.
 
 ## Run the backend separately
 
@@ -299,5 +322,5 @@ npm --prefix app/features/project-guide ci
 npm --prefix app/features/project-guide run build
 ```
 
-GitHub Actions runs these checks and package builds. Deployment/publishing is
-not configured yet.
+GitHub Actions runs these checks and package builds. See the workflow setup
+above to enable publishing and deployment.

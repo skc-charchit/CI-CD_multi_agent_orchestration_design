@@ -1,0 +1,181 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+jobs:
+  build-frontend:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: read
+
+    steps:
+      - uses: actions/checkout@v4
+        name: Check out the validated commit
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@v4
+        name: Set up Node.js
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app/frontend/package-lock.json
+      - uses: actions/configure-pages@v5
+        name: Configure GitHub Pages
+        id: pages
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: app/frontend
+      - name: Build frontend for GitHub Pages
+        run: npm run build -- --base "${{ steps.pages.outputs.base_path }}/"
+        working-directory: app/frontend
+        env:
+          GITHUB_ACTIONS: 'true'
+      - uses: actions/upload-pages-artifact@v3
+        name: Upload static site artifact
+        with:
+          path: app/frontend/dist
+
+  deploy-frontend:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    needs: build-frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - uses: actions/deploy-pages@v4
+        name: Deploy to GitHub Pages
+        id: deployment
+
+  build-backend-image:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    env:
+      IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/backend-app
+
+    steps:
+      - uses: actions/checkout@v4
+        name: Check out the validated commit
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: docker/setup-buildx-action@v3
+        name: Set up Docker Buildx
+      - uses: docker/login-action@v3
+        name: Log in to GitHub Container Registry
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        name: Generate image tags and labels
+        id: meta
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=sha-${{ github.event.workflow_run.head_sha || github.sha }}
+            type=raw,value=latest
+      - uses: docker/build-push-action@v6
+        name: Build and publish backend image
+        id: build
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+  deploy-backend:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    needs: build-backend-image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    env:
+      IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/backend-app
+      IMAGE_DIGEST: ${{ needs.build-backend-image.outputs.digest }}
+      K8S_NAMESPACE: ${{ vars.K8S_NAMESPACE || 'default' }}
+
+    steps:
+      - uses: actions/checkout@v4
+        name: Check out the validated commit
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: azure/setup-kubectl@v4
+        name: Set up kubectl
+      - name: Configure cluster access
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+        run: |
+          if [ -z "$KUBE_CONFIG" ]; then
+            echo "::error::Configure the KUBE_CONFIG secret in the production environment."
+            exit 1
+          fi
+          install -m 600 /dev/null "$RUNNER_TEMP/kubeconfig"
+          printf '%s' "$KUBE_CONFIG" > "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+      - name: Configure private GHCR image access
+        env:
+          GHCR_PULL_USERNAME: ${{ secrets.GHCR_PULL_USERNAME }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+        run: |
+          if [ -z "$GHCR_PULL_USERNAME" ] || [ -z "$GHCR_PULL_TOKEN" ]; then
+            echo "::error::Configure GHCR_PULL_USERNAME and GHCR_PULL_TOKEN in the production environment."
+            exit 1
+          fi
+          umask 077
+          auth="$(printf '%s:%s' "$GHCR_PULL_USERNAME" "$GHCR_PULL_TOKEN" | base64 -w 0)"
+          printf '{"auths":{"ghcr.io":{"auth":"%s"}}}' "$auth" > "$RUNNER_TEMP/dockerconfig.json"
+          kubectl create secret generic ghcr-pull-secret \
+            --namespace "$K8S_NAMESPACE" \
+            --type=kubernetes.io/dockerconfigjson \
+            --from-file=.dockerconfigjson="$RUNNER_TEMP/dockerconfig.json" \
+            --dry-run=client -o yaml | kubectl apply -f -
+      - name: Apply Kubernetes resources
+        run: kubectl apply -k k8s/base --namespace "$K8S_NAMESPACE"
+      - name: Deploy immutable image digest
+        run: |
+          kubectl set image deployment/backend-app \
+            backend-app="$IMAGE_NAME@$IMAGE_DIGEST" \
+            --namespace "$K8S_NAMESPACE"
+          kubectl rollout status deployment/backend-app \
+            --namespace "$K8S_NAMESPACE" \
+            --timeout=180s
+      - name: Remove deployment credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/kubeconfig" "$RUNNER_TEMP/dockerconfig.json"
